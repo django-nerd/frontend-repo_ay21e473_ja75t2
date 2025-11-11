@@ -10,38 +10,59 @@ import Gallery from './pages/Gallery'
 
 function InfiniteScrollWrapper({ children }){
   const containerRef = useRef(null)
+  const blockRef = useRef(null)
 
-  // Create an actually infinite feel by recycling content blocks vertically
   useEffect(()=>{
     const el = containerRef.current
-    if(!el) return
+    const block = blockRef.current
+    if(!el || !block) return
 
+    const getBlockHeight = () => block.getBoundingClientRect().height
+    const threshold = 200 // px from edges to trigger reposition
+
+    // Place scroll at the middle copy initially
+    const init = () => {
+      const h = getBlockHeight()
+      el.scrollTop = h
+    }
+
+    let ticking = false
     const onScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = el
-      if (scrollTop < 1000) {
-        el.scrollTop = scrollTop + (scrollHeight/2)
-      } else if (scrollTop + clientHeight > scrollHeight - 1000) {
-        el.scrollTop = scrollTop - (scrollHeight/2)
-      }
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        const h = getBlockHeight()
+        const { scrollTop, clientHeight } = el
+        const lowerBound = h - threshold
+        const upperBound = h * 2 - clientHeight - threshold
+
+        if (scrollTop < threshold) {
+          // jumped too close to the start of first copy → move to same relative spot in second
+          el.scrollTop = scrollTop + h
+        } else if (scrollTop > upperBound) {
+          // too close to end of second copy → move back by one block
+          el.scrollTop = scrollTop - h
+        }
+        ticking = false
+      })
     }
 
-    // Duplicate content to create a tall loop
-    const content = el.firstChild
-    if(content){
-      const clone = content.cloneNode(true)
-      const clone2 = content.cloneNode(true)
-      el.appendChild(clone)
-      el.appendChild(clone2)
-    }
-
+    init()
     el.addEventListener('scroll', onScroll, { passive: true })
-    el.scrollTop = (el.scrollHeight/2) - 1
-    return () => el.removeEventListener('scroll', onScroll)
+    window.addEventListener('resize', init)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', init)
+    }
   },[])
 
   return (
-    <div ref={containerRef} className="h-screen overflow-y-scroll snap-y snap-mandatory bg-black">
-      <div className="min-h-[200vh]">
+    <div ref={containerRef} className="h-screen overflow-y-scroll snap-y snap-mandatory bg-black overscroll-none">
+      {/* We render two copies of the content for seamless looping. */}
+      <div ref={blockRef} className="min-h-[200vh]">
+        {children}
+      </div>
+      <div className="min-h-[200vh]" aria-hidden>
         {children}
       </div>
     </div>
@@ -63,15 +84,6 @@ export default function App(){
       <RightDock open={openDock} onClose={() => setOpenDock(false)} />
       <div className="pt-16">
         <InfiniteScrollWrapper>
-          <section className="snap-start">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/research" element={<Research />} />
-              <Route path="/labs" element={<Labs />} />
-              <Route path="/founders" element={<Founders />} />
-              <Route path="/gallery" element={<Gallery />} />
-            </Routes>
-          </section>
           <section className="snap-start">
             <Routes>
               <Route path="/" element={<Home />} />
